@@ -1,0 +1,380 @@
+---
+title: "Quality of Wine Capstone Project"
+author: "Meghan Patterson"
+output:
+  pdf_document:
+    fig_caption: yes
+    toc: true
+    toc_depth: 3
+    number_sections: true
+fontfamily: mathpazo
+fontsize: 11pt
+geometry: margin=1in
+documentclass: article
+abstract: A variety of machine learning techniques are incorporated into this project in order to determine the best model for predicting the quality of wine. The models created incorporate logistic regression, linear discriminant analysis, k-nearest neighbors (KNN), support vector machine (SVM), decision trees and random forests. The best model was chosen based off of the highest accuracy. In this project, the highest accuracy was associated with the random forest model and that accuracy was a value of 0.8529.
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache=TRUE, warning=FALSE, message = FALSE, cache.lazy = FALSE)
+```
+
+# Introduction
+Machine learning techniques can be implemented into many industries, including those such as entertainment, food, and healthcare. What some consider as a subset of the food industry is the wine industry. Over the past few years, machine learning and artificial intelligence has revolutionized the wine industry by being able to craft a better product and produce better sales forecasts in the highly competitive market. In this project, a wine dataset is used in order to predict the quality of the wine based off of a series of predictors.
+
+The dataset used in this project is the wine quality dataset originating from the UCI Machine Learning Repository. This dataset has 6463 rows, 13 columns, 2 types of wine (red and white), a quality dependent variable and 11 additional variables that will be considered as predictors. In the dataset, there are 1593 cases of red wine and 4870 cases of white wine. Because this variable is only an identification of the wine used in each case and has no effect on the quality, this variable will not be included when creating the model. Additionally, the quality variable has been reconstructed into a factor with two levels: 0 when the quality is less than or equal to 5 and 1 when the quality is greater than 5. This was done in order to improve the efficiency and prediction of the models given that there is now only 2 levels (2 categories) instead of the original 9. When creating and testing the models, the dataset was split into a total of three subsets: a training set, a test set and a validation set. The training and test sets will be used to construct and tune the models, while the validation set will be tested on the final validation set in the end.
+
+The machine learning techniques that are included in this project include logistic regression, linear discriminant analysis, k-nearest neighbors (KNN), support vector machine (SVM), decision trees and random forests. These supervised machine learning algorithms are all considered classification algorithms. These methods were chosen to be implemented into the project due to the main objective of predicting whether a dataset of wine is high quality or low quality.
+
+# Methods
+```{r initial_setup, include=FALSE}
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+if(!require(kernlab)) install.packages("kernlab", repos = "http://cran.us.r-project.org")
+if(!require(randomForest)) install.packages("randomForest", repos = "http://cran.us.r-project.org")
+if(!require(C50)) install.packages("C50", repos = "http://cran.us.r-project.org")
+if(!require(GGally)) install.packages("GGally", repos = "http://cran.us.r-project.org")
+if(!require(rpart)) install.packages("rpart", repos = "http://cran.us.r-project.org")
+if(!require(pROC)) install.packages("pROC", repos = "http://cran.us.r-project.org")
+if(!require(psych)) install.packages("psych", repos = "http://cran.us.r-project.org")
+if(!require(e1071)) install.packages("e1071", repos = "http://cran.us.r-project.org")
+if(!require(rpart.plot)) install.packages("rpart.plot", repos = "http://cran.us.r-project.org")
+
+library(tidyverse)
+library(caret)
+library(kernlab)
+library(randomForest)
+library(C50)
+library(GGally)
+library(rpart)
+library(pROC)
+library(psych)
+library(e1071)
+library(rpart.plot)
+
+wine_data <- read.csv("https://raw.githubusercontent.com/meghanrp/Harvard-Data-Science-Capstone/master/winequalityN.csv", header = TRUE)
+```
+## Exploratory Data Analysis
+The structure of the wine dataset shown below illustrates that there are 11 numeric variables, a factor variable named "type" that holds whether the wine was red or white, and a integer variable that holds values denoting the quality of each wine.
+```{r summary_wine, echo=FALSE}
+str(wine_data)
+```
+Because the "type" variable is an identifier for what type of wine was used, it will be removed from the dataset. Additionally, the "quality" variable will be recreated into a factor variable with two levels: a 0 will take the place of any value that is less than or equal to 5, and a 1 will take the place of any value that is above 5. With the removal of the 38 NAs that were found in the dataset and tne adjustments to be made noted above, the wine dataset now has the structure below.
+```{r adjustments, include = FALSE}
+sum(is.na(wine_data))
+wine_data <- na.omit(wine_data)
+wine_data <- wine_data %>% select(-type)
+wine_data <- wine_data %>% mutate(quality_new = as.factor(ifelse(quality <= 5, 0, 1))) %>% select(-quality)
+```
+```{r str_adjustments, echo=FALSE}
+str(wine_data)
+```
+
+The "quality_new" variable is the dependent variable for the project. The proportion of values associated with this variable can be seen below. 
+```{r prop_table, echo=FALSE}
+prop_table <- prop.table(table(wine_data$quality_new))
+```
+
+In order to visualize the differences between the two qualities of wine and the predictor variables, boxplots can be made to show some of these distinctions. Figure 1 below shows a boxplot for the two qualities of wine and wine acidity. This boxplot demonstrates that the fixed acidity for the high quality of wine is slighter lower than that for the low quality of wine.
+```{r fixed_acidity_bp, echo=FALSE, fig.height=3, fig.width=3, fig.align = "center", fig.cap="\\label{fig:fixed_acidity_bp}Boxplot of the Two Qualities of Wine and the Fixed Acidity"}
+gg_wine_acidity <- wine_data %>% ggplot(aes(quality_new, fixed.acidity, color = quality_new)) + geom_boxplot(outlier.color = "darkblue")
+gg_wine_acidity
+```
+
+Figure 2 below shows a boxplot for the two qualities of wine and volatile acidity. This boxplot illustrates that the volatile acidity for the high quality wine is slightly lower than the volatile acidity for the low quality wine.
+```{r volatile_bp, echo=FALSE, fig.height=3, fig.width=3, fig.align="center", fig.cap="\\label{fig:volatile_bp}Boxplot of the Two Qualities of Wine and the Volatile Acidity"}
+gg_volatile_acidity <- wine_data %>% ggplot(aes(quality_new, volatile.acidity, color = quality_new)) + geom_boxplot(outlier.color = "darkblue")
+gg_volatile_acidity
+```
+
+Figure 3 below shows a boxplot for the two qualities of wine and the amount of total sulfur dioxide. In this boxplot, the total sulfur dioxide amount in the low quality wine is slightly higher than that for the high quality wine. Additionally, the outliers for the lower quality wine are much higher than those for the higher quality wine.
+```{r total_sulfur, echo=FALSE, fig.height=3, fig.width=3, fig.align="center", fig.cap="\\label{fig:total_sulfur}Boxplot of the Two Qualities of Wine and the Total Sulfur Amount"}
+gg_total_sulfur <- wine_data %>% ggplot(aes(quality_new, total.sulfur.dioxide, color = quality_new)) + geom_boxplot(outlier.color = "darkblue")
+gg_total_sulfur
+```
+
+Figure 4 below showcases a boxplot for the two qualities of wine and the pH. This boxplot illustrates that the higher quality wine has a slighly higher pH than that for the lower quality wine. 
+```{r pH_bp, echo=FALSE, fig.height=3, fig.width=3, fig.align="center", fig.cap="\\label{fig:pH_bp}Boxplot of the Two Qualities of Wine and the pH"}
+gg_pH <- wine_data %>% ggplot(aes(quality_new, pH, color = quality_new)) + geom_boxplot(outlier.color = "darkblue")
+gg_pH
+```
+
+Figure 5 below shows a boxplot for the two qualities of wine and the citric acid amount. This boxplot displays a higher median value for the higher quality wine, but a lower range of values for the higher quality wine compared to the lower quality wine
+```{r citric_acid, echo=FALSE, fig.height=3, fig.width=3, fig.align="center", fig.cap="\\label{fig:citric_acid}Boxplot of the Two Qualities of Wine and the Citric Acid Amount"}
+gg_citric <- wine_data %>% ggplot(aes(quality_new, citric.acid, color = quality_new)) + geom_boxplot(outlier.color = "darkblue")
+gg_citric
+```
+
+A correlation plot can be constructed with the predictors in order to visualize which predictors have a higher correlation than others. Figure 6 below displays this correlation plot. From this plot, it can be seen that the free sulfur dioxide and total sulfur dioxide have the highest correlation with a value of 0.7. The density and residual sugar have a correlation of 0.6, the density and fixed acidity have a correlation of 0.5, and the total sulfur dioxide and residual sugar have a correlation of 0.5. The remaining combinations have correlations ranging from -0.7 to 0.4. These correlations will be taken into consideration when constructing the models.
+```{r cor_plot, echo=FALSE, fig.height=4, fig.width=4, fig.align="center", fig.cap="\\label{fig:cor_plot}Correlation Plot of the Predictors"}
+cor_plot <- wine_data %>% ggcorr(method = c('complete.obs', 'pearson'), palette = "RdBu", breaks = 6, digits = 3, label = TRUE, label_color = "white")
+cor_plot
+```
+
+
+## Model Preparation
+The wine dataset will be divided into three total subsets: a training set, a test set, and the validation set. The training and test sets will be used to construct and tune the models. The test set will be used in the prediction for these models, and the model with the highest accuracy will be deemed the best model. This best model will then be applied to the validation set and the final accuracy will be obtained and recorded. The training set will receive a total of 80% of the data, the test set will receive a total of 10% of the data, and the validation set will receive a total of 10% of the data. The partitioning of the dataset(s) can be seen below.
+```{r set_seed, include=FALSE}
+set.seed(1234)
+```
+```{r dataset_partitions}
+split_index <- createDataPartition(wine_data$quality_new, p = 0.9, times = 1, list = FALSE)
+model_data <- wine_data[split_index, ]
+validation_set <- wine_data[-split_index, ]
+
+train_index <- createDataPartition(model_data$quality_new, p = 0.9, times = 1, list = FALSE)
+training_set <- model_data[train_index, ]
+test_set <- model_data[-train_index, ]
+```
+
+In order to ensure that the partitions were successful, proportion tables can be constructed on the training and test sets. The proportion tables below confirm that the partitions were successful because of the relatively same amounts of low quality and high quality wine in each.
+```{r prop_partition}
+prop.table(table(training_set$quality_new))
+prop.table(table(test_set$quality_new))
+```
+
+## Models
+### Logistic Regression Model
+The first model to be constructed is a logistic regression model. The logistic regression model is appropriate for this dataset given that the dependent variable is binary. The data used to create the model can be seen below.
+```{r set.seed, include=FALSE}
+set.seed(1234)
+```
+```{r glm.model}
+glm_model <- train(quality_new ~ ., method = "glm", data = training_set)
+```
+This model uses the train() function in the caret package with the method set to "glm." The "glm" method specifies a generalized linear model.
+The prediction can be calculated with the code below. The test set is now being used in order to make the prediction.
+```{r glm.predict}
+y_pred_glm <- predict(glm_model, test_set, type = "raw")
+```
+
+With the prediction, a confusion matrix can now be constructed and can be seen below.
+```{r glm.cf, echo = FALSE}
+conf_glm <- confusionMatrix(y_pred_glm, test_set$quality_new)
+conf_glm
+```
+The confusion matrix indicates that the accuracy for the model is 0.7228. Additionally, the sensitivity is 0.5540 and the precision is 0.6413. Additional models will be constructed in order to attempt to improve (increase) these values.
+
+Table 1 below shows the accuracy results for the model.
+```{r acc_results, echo=FALSE}
+glm_acc <- conf_glm$overall[1]
+accuracy_results <- data.frame(Model = "Logistic Regression", Accuracy = glm_acc)
+accuracy_results %>% knitr::kable(caption = "Logistic Regression Model and Corresponding Accuracy Results")
+```
+
+### Linear Discriminant Analysis (LDA) Model
+The second model to be constructed is the linear discriminant analysis (LDA) model. This method is also suitable for the binary classification problem at hand. The data used to create the model can be seen below.
+```{r seed2, include=FALSE}
+set.seed(1234)
+```
+```{r lda.model}
+lda_model <- train(quality_new~., method = "lda", data = training_set, 
+                   trControl = trainControl(method = "cv"))
+```
+This model uses the train() function in the caret package with the method set to "lda." The "lda" method specifies linear discriminant analysis.
+The prediction can be calculated with the code below. The test set is now being used in order to make the prediction.
+```{r lda.predict}
+y_pred_lda <- predict(lda_model, test_set)
+```
+
+With the prediction, a confusion matrix can now be constructed and can be seen below.
+```{r lda.cf, echo=FALSE}
+conf_lda <- confusionMatrix(y_pred_lda, test_set$quality_new)
+conf_lda 
+```
+The confusion matrix indicates that the accuracy for the model is 0.7228. Additionally, the sensitivity is 0.5546 and the precision is 0.6444. These values are similar to those found with the logistic regression model, but this is understandable due to the similarity between the two approaches in the models. Additional models will be constructed in order to attempt to improve (increase) these values.
+
+Table 2 below shows the accuracy results for the model added to the existing table.
+```{r lda_acc_results, echo=FALSE}
+lda_acc <- conf_lda$overall[1]
+accuracy_results <- accuracy_results %>% add_row(Model = "Linear Discriminant Analysis (LDA)", Accuracy = lda_acc)
+accuracy_results %>% knitr::kable(caption = "Linear Discriminant Analysis Model and Corresponding Accuracy Results")
+```
+
+### K-Nearest Neighbors Model (KNN) Model
+The third model to be constructed is the k-nearest neighbors (KNN) model. The data used to create the model can be seen below.
+```{r seed3, include=FALSE}
+set.seed(1234)
+```
+```{r knn_model}
+ctrl <- trainControl(method = "repeatedcv", repeats = 5)
+knn_model <- train(quality_new~., method = "knn", data = training_set, 
+                   trControl = ctrl)
+knn_model
+```
+This model uses the train() function from the caret package with the method set to "knn." The "knn" method specifies k-nearest neighbors.
+
+A plot can be constructed with the model in order to showcase the number of neighbors versus the accuracy. Figure 7 below demonstrates this concept.
+```{r knn.plot, echo = FALSE, fig.height=2, fig.width=3, fig.align="center", fig.cap="\\label{fig:knn.plot}Number of Neighbors versus Accuracy for the KNN Model"}
+plot <- plot(knn_model, print.three = 0.5, type = "S")
+plot
+```
+Figure 7 illustrates that the accuracy is increased when the number of neighbors is between 5 and 7-9. Thus, the ideal value of k is within those range of values. The data above tells that the optimal value of k is 5.
+
+The prediction can be calculated with the code below. The test set is now being used in order to make the prediction. The test set is now being used in order to make the prediction.
+```{r knn.predict}
+y_pred_knn <- predict(knn_model, test_set)
+```
+
+With the prediction, a confusion matrix can now be constructed and can be seen below.
+```{r knn.cf, echo=FALSE}
+conf_knn <- confusionMatrix(y_pred_knn, test_set$quality_new)
+conf_knn
+```
+The confusion matrix indicates that the accuracy for the model is 0.6660. Additionally, the sensitivity is 0.4836 and the precision is 0.5508. The results for this model are the lowest seen thus far. Because of this, it can already be suspected that the KNN model will not be the ideal model for the dataset. Additional models will be constructed in order to attempt to improve (increase) these values.
+
+Table 3 below shows the accuracy results for the model added to the existing table.
+```{r knn.results, echo=FALSE}
+knn_acc <- conf_knn$overall[1]
+accuracy_results <- accuracy_results %>% add_row(Model = "K-Nearest Neighbors (KNN)", Accuracy = knn_acc)
+accuracy_results %>% knitr::kable(caption = "K-Nearest Neighbors Model and Corresponding Accuracy Results")
+```
+
+### Support Vector Machine (SVM) Model
+The fourth model to be constructed is the support vector machine (SVM) model. In the SVM model, there is a cost of constraints violation term. The ideal model would have the optimal value for the cost term. In order to find this optimal value, a for-loop is created with different values of "k" in order to find the cost term that gives the highest accuracy. The for-loop can be seen below.
+```{r seed4, include=FALSE}
+set.seed(1234)
+```
+```{r for.loop}
+Y <- NULL
+k <- 30
+for (i in 1:k) {
+  svm.fit <- svm(quality_new~., training_set, scale = FALSE, kernel = "linear", cost = i)
+  pred_svm <- predict(svm.fit, test_set)
+  conf <- confusionMatrix(pred_svm, test_set$quality_new)
+  Y[i] <- conf$overall[1]
+}
+```
+The data from this for-loop can be transformed into a plot in order to visually see the trend of k values and corresponding accuracy values. Figure 8 below shows this plot and the vertical line on the plot indicates the cost term that holds the highest accuracy.
+```{r svm.plot, fig.height=3, fig.width=3, fig.align="center", fig.cap="\\label{fig:svm.plot}Cost Terms and Corresponding Accuracies"}
+plot(1:k, Y, pch = 20, xlab = "Cost", ylab = "Accuracy")
+abline(v = which.max(Y))
+```
+The plot indicates that the cost term equaled to 4 has the highest accuracy. Therefore, this value will be used in construction of the model.
+
+The data for the model can be seen below.
+```{r svm.model}
+svm_fit <- svm(quality_new~., training_set, scale = FALSE, kernel = "linear", cost = 4)
+```
+
+With this ideal model, the prediction can be calculated with the test set.
+```{r svm.pred}
+svm_pred <- predict(svm_fit, test_set)
+```
+
+With the prediction, a confusion matrix can now be constructed and can be seen below.
+```{r svm.cf, echo=FALSE}
+conf_svm <- confusionMatrix(svm_pred, test_set$quality_new)
+conf_svm
+```
+This confusion matrix indicates that the accuracy for the model is 0.7452. Additionally, the sensitivity is 0.5164 and the precision is 0.7097. The accuracy with the SVM model is the highest accuracy thus far. This is likely due to the fine-tuning (finding the optimal cost term) that was performed. This high-accuracy model will be taken into account when choosing the best model. Additional models will be constructed in order to attempt to improve (increase) these values.
+
+Table 4 below shows the accuracy results for the model added to the existing table.
+```{r svm.acc.results, echo=FALSE}
+svm_acc <- conf_svm$overall[1]
+accuracy_results <- accuracy_results %>% add_row(Model = "Support Vector Machine (SVM)", Accuracy = svm_acc)
+accuracy_results %>% knitr::kable(caption = "Support Vector Machine Model and Corresponding Accuracy Results")
+```
+
+### Decision Tree Model
+The fifth model to be constructed is the decision tree model. The data used to create the model can be seen below.
+```{r seed5, include=FALSE}
+set.seed(1234)
+```
+```{r dec.tree.model}
+ctrl <- rpart.control(minsplit = 5L, maxdepth = 5L, minbucket = 5, cp = .002, maxsurrogate = 4)
+dec_tree.model <- rpart(quality_new~., training_set, method = "class", control = ctrl)
+```
+This model uses the rpart() function that splits the data recursively and creates decision trees.
+
+A decision tree plot can be constructed with the results from the model. This model can be seen in Figure 10 below.
+```{r dec.tree.plot, fig.height=6, fig.width=4, fig.align="center", fig.cap="\\label{fig:dec.tree.plot}Decision Tree Plot"}
+prp(dec_tree.model)
+```
+The results in Figure 9 indicate which predictors have a higher influence than others. This includes "alcohol", "volatile", and "sulphate."
+
+The prediction can be calculated with the code below. The test set is now being used in order to make the prediction.
+```{r dec.tree.pred}
+y_pred_dec <- predict(dec_tree.model, test_set, type = "class")
+```
+
+With the prediction, a confusion matrix can now be constructed and can be seen below.
+```{r dec.tree.cf, echo=FALSE}
+conf_dec_tree <- confusionMatrix(table(y_pred_dec, test_set$quality_new))
+conf_dec_tree
+```
+The confusion matrix indicates that the accuracy for the model is 0.7211. Additionally, the sensitivity is 0.6432 and the precision is 0.6313. Additional models will be constructed in order to attempt to improve (increase) these values.
+
+Table 5 below shows the accuracy results for the model added to the existing table.
+```{r dec.tree.acc, echo=FALSE}
+dec_acc <- conf_dec_tree$overall[1]
+accuracy_results <- accuracy_results %>% add_row(Model = "Decision Tree", Accuracy = dec_acc)
+accuracy_results %>% knitr::kable(caption = "Decision Tree Model and Corresponding Accuracy Results")
+```
+
+### Random Forest Model
+The sixth model to be constructed is the random forest model. The data used to create this model can be seen below.
+```{r seed6, include=FALSE}
+set.seed(1234)
+```
+```{r rf.model}
+control <- trainControl(method = "cv", repeats = 5)
+rf_model <- train(quality_new~., training_set, method = "rf", trControl = control)
+```
+This model uses the train() function from the caret package with the method set to "rf." The "rf" method specifies random forest.
+
+The prediction can be calculated with the code below. The test set is now being used in order to make the prediction.
+```{r rf.pred}
+y_pred_rf <- predict(rf_model, test_set)
+```
+
+With the prediction, a confusion matrix can now be constructed and can be seen below.
+```{r rf.cf, echo=FALSE}
+conf_rf <- confusionMatrix(y_pred_rf, test_set$quality_new)
+conf_rf
+```
+The confusion matrix indicates that the accuracy for the model is 0.8106. Additionally, the sensitivity is 0.7136 and the precision is 0.7755. The accuracy of 0.8106 makes the random forest model have the highest accuracy out of all the models constructed and thus, the best model for the dataset.
+
+Table 6 below shows the accuracy results for the model added to the existing table.
+```{r rf.acc.results, echo=FALSE}
+rf_acc <- conf_rf$overall[1]
+accuracy_results <- accuracy_results %>% add_row(Model = "Random Forest", Accuracy = rf_acc)
+accuracy_results %>% knitr::kable(caption = "Random Forest Model and Corresponding Accuracy Results")
+```
+
+### Random Forest Model - Validation Dataset
+The random forest model constructed on the training set and evaluated on the test set had an accuracy of 0.8193. This accuracy of 0.8193 was the highest accuracy out of all of the models constructed and therefore will be chosen as the best model. The random forest model will be evaluated on the validation dataset that has not previously been used. In order to evaluate with the most data possible, the model_data (data subset before being split into training_set and test_set) will be used. The data used to create this model can be seen below.
+```{r seed7, include=FALSE}
+set.seed(1234)
+```
+```{r rf.model.valid}
+control <- trainControl(method = "cv", repeats = 5)
+rf_valid_model <- train(quality_new~., model_data, method = "rf", trControl = control)
+```
+
+The prediction can be calculated with the code below. The test set is now being used in order to make the prediction.
+```{r rf.pred.valid}
+y_pred_rf_valid <- predict(rf_valid_model, validation_set)
+```
+
+With the prediction, a confusion matrix can now be constructed and can be seen below.
+```{r rf.cf.conf, echo=FALSE}
+conf_rf_valid <- confusionMatrix(y_pred_rf_valid, validation_set$quality_new)
+conf_rf_valid
+```
+The confusion matrix indicates that the accuracy for the model is 0.8529. Additionally, the sensitivity is 0.7046 and the precision is 0.8743. Therefore, the final and best accuracy obtained for the dataset is 0.8529 from the random forest model.
+
+Table 7 below shows the accuracy results for the model added to the existing table.
+```{r rf.valid.acc.results, echo=FALSE}
+rf_valid_acc <- conf_rf_valid$overall[1]
+accuracy_results <- accuracy_results %>% add_row(Model = "Random Forest - Validation", Accuracy = rf_valid_acc)
+accuracy_results %>% knitr::kable(caption = "Random Forest Model (Validation Set) and Corresponding Accuracy Results")
+```
+
+# Results
+Table 8 below shows the complete table of models and their corresponding accuracies. In this table, the KNN model has the worst accuracy with a value of 0.6764, while the random forest model has the best accuracy with a value of 0.8192. The logistic regression, LDA, SVM and decision tree models have similar accuracies in the range of 0.7228-0.7452. With the random forest model having the highest accuracy, this model was deemed the best model and was applied to the validation dataset. The accuracy of that model was 0.8529 and thus, 0.8529 is the final accuracy for the project.
+```{r acc.total.results, echo=FALSE}
+accuracy_results %>% knitr::kable(caption = "All Models and Corresponding Accuracies")
+```
+
+# Conclusion
+The wine quality dataset was partitioned, trained, tested, and validated with an assortment of machine learning techniques. With this approach, it was found that the optimal model for the dataset was the random forest model and this provided a final accuracy of 0.8192. The wine type was removed from this dataset due to it being an identifier rather than a useful predictor for the dependent variable, the quality of the wine. Future projects can split the dataset into the two different types of wine and perform the machine learning methods separately on those two new datasets. Additionally, instead of predicting the quality of wine, the analysis can be focused on predicting the type of wine.
